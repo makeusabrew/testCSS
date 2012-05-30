@@ -23,6 +23,9 @@ Runner =
             selector: selector
             property: property
             expected: expected
+            page: null
+            url: null
+
         tests.push test
 
     start: ->
@@ -33,38 +36,50 @@ Runner =
                     ph.createPage (_page) ->
                         _page.open page.url, (status) ->
                             page.cb()
-                            queueTests _page
+                            queueTests _page, page.url
                             opened += 1
                             if opened is pages.length
                                 runTests ph
 
 
-queueTests = (page) ->
+queueTests = (page, url) ->
     for test in tests
         test.page = page
+        test.url = url
         allTests.push test
 
     tests = []
 
 runTests = (ph) ->
     for test in allTests
-        actuallyAssert test.page, test.selector, test.property, test.expected, (ok) ->
-            if not ok
-                failures.push(test)
-                process.stdout.write(".".red)
-            else
-                passes.push(test)
-                process.stdout.write(".".green)
+        do (test) ->
+            actuallyAssert test.page, test.selector, test.property, test.expected, (actual) ->
+                test.actual = actual
 
-            testsRun += 1
-            if testsRun is allTests.length
-                process.stdout.write "\n"
-                console.log "#{passes.length} passes, #{failures.length} failures"
-                ph.exit()
+                if test.expected is test.actual
+                    passes.push(test)
+                    process.stdout.write(".".green)
+                else
+                    failures.push(test)
+                    process.stdout.write(".".red)
+
+                testsRun += 1
+                if testsRun is allTests.length
+                    process.stdout.write "\n"
+                    console.log "#{passes.length} passes, #{failures.length} failures"
+
+                    if failures.length
+                        process.stdout.write "\n"
+                        console.log "Failures:".red
+                        process.stdout.write "\n"
+
+                    for failure in failures
+                        console.log "URL: #{failure.url}: #{failure.actual} !== #{failure.expected}"
+                    ph.exit()
 
 actuallyAssert = (page, selector, property, expected, cb) ->
     evaluate page, (actual) ->
-        cb(actual is expected)
+        cb(actual)
 
     , (selector, property) ->
         content = document.getElementById(selector)
