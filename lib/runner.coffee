@@ -5,15 +5,18 @@ require "colors"
 failures = []
 passes = []
 tests = []
+allTests = []
 testsRun = 0
+
+pages = []
 
 Runner =
     addPage: (url, cb) ->
-        phantom.create (ph) ->
-            ph.createPage (page) ->
-                page.open url, (status) ->
-                    cb()
-                    runTests ph, page
+        page =
+            url: url
+            cb: cb
+
+        pages.push page
 
     assertStyle: (selector, property, expected) ->
         test =
@@ -22,10 +25,30 @@ Runner =
             expected: expected
         tests.push test
 
+    start: ->
+        opened = 0
+        phantom.create (ph) ->
+            for page in pages
+                do (page) ->
+                    ph.createPage (_page) ->
+                        _page.open page.url, (status) ->
+                            page.cb()
+                            queueTests _page
+                            opened += 1
+                            if opened is pages.length
+                                runTests ph
 
-runTests = (ph, page) ->
+
+queueTests = (page) ->
     for test in tests
-        actuallyAssert page, test.selector, test.property, test.expected, (ok) ->
+        test.page = page
+        allTests.push test
+
+    tests = []
+
+runTests = (ph) ->
+    for test in allTests
+        actuallyAssert test.page, test.selector, test.property, test.expected, (ok) ->
             if not ok
                 failures.push(test)
                 process.stdout.write(".".red)
@@ -34,7 +57,7 @@ runTests = (ph, page) ->
                 process.stdout.write(".".green)
 
             testsRun += 1
-            if testsRun is tests.length
+            if testsRun is allTests.length
                 process.stdout.write "\n"
                 console.log "#{passes.length} passes, #{failures.length} failures"
                 ph.exit()
