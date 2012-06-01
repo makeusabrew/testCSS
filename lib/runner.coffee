@@ -82,7 +82,7 @@ actuallyAssert = (page, selector, property, expected, cb) ->
         cb(actual)
 
     , (selector, property) ->
-        content = document.getElementById(selector)
+        content = document.querySelector(selector)
         window.getComputedStyle(content, null).getPropertyValue(property)
     , selector, property
 
