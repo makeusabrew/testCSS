@@ -29,20 +29,22 @@ Runner =
         tests.push test
 
     start: ->
-        opened = 0
         phantom.create (ph) ->
-            for page in pages
-                do (page) ->
-                    ph.createPage (_page) ->
-                        _page.open page.url, (status) ->
-                            page.cb()
-                            queueTests _page, page.url
-                            opened += 1
-                            if opened is pages.length
-                                runTests ph
+            queuePages ph, pages
 
 
-queueTests = (page, url) ->
+queuePages = (ph, _pages) ->
+    if _pages.length is 0
+        return runTests ph, allTests
+
+    page = _pages.shift()
+    ph.createPage (_page) ->
+        _page.open page.url, (status) ->
+            page.cb()
+            addTests _page, page.url
+            queuePages ph, _pages
+
+addTests = (page, url) ->
     for test in tests
         test.page = page
         test.url = url
@@ -50,32 +52,36 @@ queueTests = (page, url) ->
 
     tests = []
 
-runTests = (ph) ->
-    for test in allTests
-        do (test) ->
-            actuallyAssert test.page, test.selector, test.property, test.expected, (actual) ->
-                test.actual = actual
+runTests = (ph, _tests) ->
+    return finish ph if _tests.length is 0
 
-                if test.expected is test.actual
-                    passes.push(test)
-                    process.stdout.write(".".green)
-                else
-                    failures.push(test)
-                    process.stdout.write(".".red)
+    test = _tests.shift()
 
-                testsRun += 1
-                if testsRun is allTests.length
-                    process.stdout.write "\n"
-                    console.log "#{passes.length} passes, #{failures.length} failures"
+    actuallyAssert test.page, test.selector, test.property, test.expected, (actual) ->
+        test.actual = actual
 
-                    if failures.length
-                        process.stdout.write "\n"
-                        console.log "Failures:".red
-                        process.stdout.write "\n"
+        if test.expected is test.actual
+            passes.push(test)
+            process.stdout.write(".".green)
+        else
+            failures.push(test)
+            process.stdout.write(".".red)
 
-                    for failure in failures
-                        console.log "URL: #{failure.url}: #{failure.actual} !== #{failure.expected}"
-                    ph.exit()
+        testsRun += 1
+        runTests ph, _tests
+
+finish = (ph) ->
+    process.stdout.write "\n"
+    console.log "#{passes.length} passes, #{failures.length} failures"
+
+    if failures.length
+        process.stdout.write "\n"
+        console.log "Failures:".red
+        process.stdout.write "\n"
+
+    for failure in failures
+        console.log "URL: #{failure.url}: #{failure.actual} !== #{failure.expected}"
+    ph.exit()
 
 actuallyAssert = (page, selector, property, expected, cb) ->
     evaluate page, (actual) ->
