@@ -7,6 +7,10 @@ passes   = []
 allTests = []
 pages    = []
 
+_reporter = "dot"
+
+Reporter = require "./reporters/#{_reporter}"
+
 Runner =
     addPage: (url, cb) ->
         page =
@@ -74,10 +78,10 @@ runTests = (ph) ->
 
             if test.expected is test.actual
                 passes.push(test)
-                process.stdout.write(".".green)
+                Reporter.pass test
             else
                 failures.push(test)
-                process.stdout.write(".".red)
+                Reporter.fail test
 
             queueTests _tests
     )(allTests)
