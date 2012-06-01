@@ -7,10 +7,6 @@ passes   = []
 allTests = []
 pages    = []
 
-# dirty variable to keep track of any tests added by the current
-# addPage callback
-tests    = []
-
 Runner =
     addPage: (url, cb) ->
         page =
@@ -18,7 +14,6 @@ Runner =
             cb: cb
 
         pages.push page
-
 
     pageTests: []
 
@@ -34,53 +29,58 @@ Runner =
 
     start: ->
         phantom.create (ph) ->
-            queuePages ph, pages
 
+            # this self executing method is a nice way to queue up the
+            # asynchronous calles
+            (queuePages = (_pages) ->
 
-queuePages = (ph, _pages) ->
-    if _pages.length is 0
-        return runTests ph, allTests
+                return runTests ph, allTests if _pages.length is 0
 
-    page = _pages.shift()
+                page = _pages.shift()
 
-    ph.createPage (_page) ->
-        _page.open page.url, (status) ->
+                ph.createPage (_page) ->
+                    _page.open page.url, (status) ->
 
-            # the way we queue tests is a bit grim, by dumping asserts
-            # into this variable. Hence before each callback it needs emptying
-            Runner.pageTests = []
+                        # the way we queue tests is a bit grim, by dumping asserts
+                        # into this variable. Hence before each callback it needs emptying
+                        Runner.pageTests = []
 
-            # only once we have an actual page can we add the
-            # assertions in a user's callback.
-            page.cb()
+                        # only once we have an actual page can we add the
+                        # assertions in a user's callback.
+                        page.cb()
 
-            # queue up each test added by the callback against the
-            # phantomjs page instance
-            for test in Runner.pageTests
-                test.page = _page
-                test.url  = page.url
-                
-                allTests.push test
+                        # queue up each test added by the callback against the
+                        # phantomjs page instance
+                        for test in Runner.pageTests
+                            test.page = _page
+                            test.url  = page.url
+                            
+                            allTests.push test
 
-            # loop back through
-            queuePages ph, _pages
+                        # loop back through
+                        queuePages _pages
+            )(pages)
 
-runTests = (ph, _tests) ->
-    return finish ph if _tests.length is 0
+runTests = (ph) ->
+    
+    # loop over and run each test in sequence
+    (queueTests = (_tests) ->
+        return finish ph if _tests.length is 0
 
-    test = _tests.shift()
+        test = _tests.shift()
 
-    actuallyAssert test.page, test.selector, test.property, test.expected, (actual) ->
-        test.actual = actual
+        actuallyAssert test.page, test.selector, test.property, test.expected, (actual) ->
+            test.actual = actual
 
-        if test.expected is test.actual
-            passes.push(test)
-            process.stdout.write(".".green)
-        else
-            failures.push(test)
-            process.stdout.write(".".red)
+            if test.expected is test.actual
+                passes.push(test)
+                process.stdout.write(".".green)
+            else
+                failures.push(test)
+                process.stdout.write(".".red)
 
-        runTests ph, _tests
+            queueTests _tests
+    )(allTests)
 
 finish = (ph) ->
     process.stdout.write "\n"
