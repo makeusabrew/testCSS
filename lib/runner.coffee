@@ -1,14 +1,15 @@
 phantom = require "phantom"
-assert = require "assert"
+assert  = require "assert"
 require "colors"
 
 failures = []
-passes = []
-tests = []
+passes   = []
 allTests = []
-testsRun = 0
+pages    = []
 
-pages = []
+# dirty variable to keep track of any tests added by the current
+# addPage callback
+tests    = []
 
 Runner =
     addPage: (url, cb) ->
@@ -18,6 +19,9 @@ Runner =
 
         pages.push page
 
+
+    pageTests: []
+
     assertStyle: (selector, property, expected) ->
         test =
             selector: selector
@@ -26,7 +30,7 @@ Runner =
             page: null
             url: null
 
-        tests.push test
+        Runner.pageTests.push test
 
     start: ->
         phantom.create (ph) ->
@@ -38,19 +42,28 @@ queuePages = (ph, _pages) ->
         return runTests ph, allTests
 
     page = _pages.shift()
+
     ph.createPage (_page) ->
         _page.open page.url, (status) ->
+
+            # the way we queue tests is a bit grim, by dumping asserts
+            # into this variable. Hence before each callback it needs emptying
+            Runner.pageTests = []
+
+            # only once we have an actual page can we add the
+            # assertions in a user's callback.
             page.cb()
-            addTests _page, page.url
+
+            # queue up each test added by the callback against the
+            # phantomjs page instance
+            for test in Runner.pageTests
+                test.page = _page
+                test.url  = page.url
+                
+                allTests.push test
+
+            # loop back through
             queuePages ph, _pages
-
-addTests = (page, url) ->
-    for test in tests
-        test.page = page
-        test.url = url
-        allTests.push test
-
-    tests = []
 
 runTests = (ph, _tests) ->
     return finish ph if _tests.length is 0
@@ -67,7 +80,6 @@ runTests = (ph, _tests) ->
             failures.push(test)
             process.stdout.write(".".red)
 
-        testsRun += 1
         runTests ph, _tests
 
 finish = (ph) ->
@@ -81,6 +93,7 @@ finish = (ph) ->
 
     for failure in failures
         console.log "URL: #{failure.url}: #{failure.actual} !== #{failure.expected}"
+
     ph.exit()
 
 actuallyAssert = (page, selector, property, expected, cb) ->
